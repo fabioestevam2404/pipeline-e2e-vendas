@@ -1,0 +1,200 @@
+{
+  "_comment": "==========================================================================",
+  "_comment2": "  Databricks Workflow — Pipeline E2E de Vendas",
+  "_comment3": "  Como usar:",
+  "_comment4": "    1. Acesse Databricks workspace → Workflows → Create Job",
+  "_comment5": "    2. No canto superior direito, clique em 'Edit JSON'",
+  "_comment6": "    3. Cole o conteúdo deste arquivo",
+  "_comment7": "    4. Substitua os placeholders: <CAMINHO>, <CLUSTER_ID>, <EMAIL>",
+  "_comment8": "    5. Salve e execute",
+  "_comment9": "  Alternativamente, importe via CLI:",
+  "_comment10": "    databricks jobs create --json @pipeline_workflow.json",
+  "_comment11": "==========================================================================",
+
+  "name": "Pipeline E2E de Vendas — Produção",
+  "email_notifications": {
+    "on_failure": ["<EMAIL_TIME_DE_DADOS>"],
+    "on_success": [],
+    "no_alert_for_skipped_runs": true
+  },
+  "webhook_notifications": {},
+  "timeout_seconds": 7200,
+  "max_concurrent_runs": 1,
+  "schedule": {
+    "quartz_cron_expression": "0 0 5 * * ?",
+    "timezone_id": "America/Sao_Paulo",
+    "_comment": "Executa às 05:00 UTC (02:00 BRT) — dados do dia anterior já disponíveis"
+  },
+  "job_clusters": [
+    {
+      "job_cluster_key": "pipeline_cluster",
+      "new_cluster": {
+        "cluster_name": "",
+        "spark_version": "15.4.x-scala2.12",
+        "node_type_id": "i3.2xlarge",
+        "driver_node_type_id": "i3.2xlarge",
+        "num_workers": 0,
+        "autoscale": {
+          "min_workers": 2,
+          "max_workers": 8
+        },
+        "spark_conf": {
+          "spark.sql.extensions": "io.delta.sql.DeltaSparkSessionExtension",
+          "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+          "spark.databricks.delta.schema.autoMerge.enabled": "true",
+          "spark.databricks.delta.optimizeWrite.enabled": "true",
+          "spark.databricks.delta.autoCompact.enabled": "true",
+          "spark.sql.adaptive.enabled": "true",
+          "spark.sql.adaptive.coalescePartitions.enabled": "true",
+          "spark.sql.adaptive.skewJoin.enabled": "true",
+          "spark.sql.shuffle.partitions": "200"
+        },
+        "aws_attributes": {
+          "instance_profile_arn": "<ARN_DO_INSTANCE_PROFILE>",
+          "availability": "SPOT_WITH_FALLBACK",
+          "spot_bid_price_percent": 100,
+          "_comment": "SPOT_WITH_FALLBACK: usa Spot quando disponível, fallback para On-Demand"
+        },
+        "runtime_engine": "PHOTON",
+        "_comment_photon": "Photon acelera Spark SQL em 3-8x — recomendado para camada Gold",
+        "data_security_mode": "SINGLE_USER",
+        "single_user_name": "<EMAIL_SERVICE_PRINCIPAL>",
+        "custom_tags": {
+          "project":     "pipeline-vendas",
+          "environment": "production",
+          "team":        "data-engineering",
+          "cost-center": "data-platform"
+        }
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "task_key": "00_setup",
+      "description": "Configuração do ambiente: Unity Catalog, diretórios e validação de conectividade",
+      "job_cluster_key": "pipeline_cluster",
+      "notebook_task": {
+        "notebook_path": "<CAMINHO_REPO>/00_setup",
+        "base_parameters": {
+          "env":        "{{job.environment}}",
+          "batch_date": "{{job.start_time.iso_date}}",
+          "catalog":    "pipeline_vendas"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 600,
+      "max_retries": 1,
+      "min_retry_interval_millis": 60000,
+      "retry_on_timeout": false,
+      "libraries": [
+        { "pypi": { "package": "delta-spark==3.2.0" } }
+      ]
+    },
+    {
+      "task_key": "01_bronze",
+      "description": "Ingestão JSON e CSV → Bronze Delta (append particionado)",
+      "depends_on": [{ "task_key": "00_setup" }],
+      "job_cluster_key": "pipeline_cluster",
+      "notebook_task": {
+        "notebook_path": "<CAMINHO_REPO>/01_bronze",
+        "base_parameters": {
+          "env":        "{{job.environment}}",
+          "batch_date": "{{job.start_time.iso_date}}"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 1800,
+      "max_retries": 2,
+      "min_retry_interval_millis": 120000,
+      "retry_on_timeout": true
+    },
+    {
+      "task_key": "02_silver",
+      "description": "Limpeza, deduplicação, validação e enrichment → Silver Delta (MERGE)",
+      "depends_on": [{ "task_key": "01_bronze" }],
+      "job_cluster_key": "pipeline_cluster",
+      "notebook_task": {
+        "notebook_path": "<CAMINHO_REPO>/02_silver",
+        "base_parameters": {
+          "env":        "{{job.environment}}",
+          "batch_date": "{{job.start_time.iso_date}}"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 2400,
+      "max_retries": 2,
+      "min_retry_interval_millis": 120000,
+      "retry_on_timeout": true
+    },
+    {
+      "task_key": "03_gold",
+      "description": "Agregações diárias/semanais/mensais + KPI Summary → Gold Delta",
+      "depends_on": [{ "task_key": "02_silver" }],
+      "job_cluster_key": "pipeline_cluster",
+      "notebook_task": {
+        "notebook_path": "<CAMINHO_REPO>/03_gold",
+        "base_parameters": {
+          "env":        "{{job.environment}}",
+          "batch_date": "{{job.start_time.iso_date}}"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 2400,
+      "max_retries": 2,
+      "min_retry_interval_millis": 120000,
+      "retry_on_timeout": true
+    },
+    {
+      "task_key": "04_optimize",
+      "description": "OPTIMIZE, VACUUM, ANALYZE, RBAC e monitoramento de todas as camadas",
+      "depends_on": [{ "task_key": "03_gold" }],
+      "job_cluster_key": "pipeline_cluster",
+      "notebook_task": {
+        "notebook_path": "<CAMINHO_REPO>/04_optimize",
+        "base_parameters": {
+          "env":        "{{job.environment}}",
+          "batch_date": "{{job.start_time.iso_date}}"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 3600,
+      "max_retries": 1,
+      "min_retry_interval_millis": 60000,
+      "retry_on_timeout": false,
+      "_comment": "Otimização pode demorar em grandes volumes — timeout generoso de 1h"
+    }
+  ],
+  "parameters": [
+    {
+      "name":    "env",
+      "default": "prod"
+    },
+    {
+      "name":    "batch_date",
+      "default": "{{job.start_time.iso_date}}"
+    },
+    {
+      "name":    "catalog",
+      "default": "pipeline_vendas"
+    }
+  ],
+  "run_as": {
+    "service_principal_name": "<EMAIL_SERVICE_PRINCIPAL>"
+  },
+  "access_control_list": [
+    {
+      "group_name":       "data_engineers",
+      "permission_level": "CAN_MANAGE"
+    },
+    {
+      "group_name":       "data_analysts",
+      "permission_level": "CAN_VIEW"
+    }
+  ],
+  "git_source": {
+    "_comment":     "Descomente e configure para integração com repositório Git",
+    "_url":         "https://github.com/<org>/<repo>",
+    "_git_branch":  "main",
+    "_git_provider": "gitHub"
+  }
+}

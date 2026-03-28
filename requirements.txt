@@ -1,0 +1,16 @@
+# =============================================================================
+# PIPELINE E2E DE VENDAS — Dependências
+# =============================================================================
+# Instalação local (dev/teste):
+#   pip install -r requirements.txt
+#
+# No Databricks estas bibliotecas já estão disponíveis no runtime.
+# Adicione apenas bibliotecas extras no cluster via Libraries tab.
+# =============================================================================
+
+# ── PySpark + Delta Lake (execução local) ────────────────────────────────────
+pyspark==3.5.1
+delta-spark==3.2.0
+
+# ── Utilitários gerais ───────────────────────────────────────────────────────
+python-dotenv>=1.0.0   # carregar variáveis de ambiente de arquivo .env local
