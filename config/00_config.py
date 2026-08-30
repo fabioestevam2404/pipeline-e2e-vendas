@@ -92,6 +92,13 @@ class PipelineConfig:
     group_executives: str = "executives"
     group_platform:   str = "data_platform"
 
+    def __post_init__(self) -> None:
+        # batch_date chega via widget Databricks/env var (_get_param) e é
+        # interpolado direto em SQL (spark.sql(f"...{cfg.batch_date}...")) em
+        # vários notebooks — validar o formato aqui, uma única vez, fecha o
+        # vetor de injeção para todos eles (ver bandit B608).
+        datetime.strptime(self.batch_date, "%Y-%m-%d")
+
     # ── Schemas (bancos) ──────────────────────────────────────────────────────
     @property
     def bronze_db(self) -> str:

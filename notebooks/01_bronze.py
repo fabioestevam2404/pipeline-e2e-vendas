@@ -33,7 +33,7 @@ try:
     from pyspark.sql import functions as F
     from pyspark.sql.types import (
         StructType, StructField,
-        StringType, IntegerType, DoubleType, DateType
+        StringType, DateType
     )
     _PYSPARK_AVAILABLE = True
 except ModuleNotFoundError:
@@ -64,6 +64,8 @@ except ImportError:
         bronze_path:     str = os.environ.get("BRONZE_PATH",      "/mnt/bronze/vendas/")
         audit_path:      str = os.environ.get("AUDIT_PATH",       "/mnt/audit/pipeline_vendas/")
         quarantine_path: str = os.environ.get("QUARANTINE_PATH",  "/mnt/bronze/vendas/_quarantine/")
+        def __post_init__(self) -> None:
+            datetime.strptime(self.batch_date, "%Y-%m-%d")  # ver bandit B608 em 00_config.py
         @property
         def bronze_db(self): return f"{self.catalog}.bronze"
         @property
@@ -138,7 +140,7 @@ def _ensure_hadoop_home() -> None:
         if not dest.exists():
             logger.info(f"[HADOOP] Baixando {fname}...")
             try:
-                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)
+                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)  # nosec B310 - base_url e fname sao constantes fixas (winutils oficial), nao input externo
             except Exception as e:
                 logger.warning(f"[HADOOP] Falha ao baixar {fname}: {e}")
     os.environ["HADOOP_HOME"] = str(hadoop_dir)
