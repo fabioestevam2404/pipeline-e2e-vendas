@@ -84,7 +84,7 @@ def _ensure_hadoop_home() -> None:
         if not dest.exists():
             logger.info(f"[HADOOP] Baixando {fname} (necessário para PySpark no Windows)...")
             try:
-                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)
+                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)  # nosec B310 - base_url e fname sao constantes fixas (winutils oficial), nao input externo
                 logger.info(f"[HADOOP] {fname} baixado com sucesso.")
             except Exception as e:
                 logger.warning(f"[HADOOP] Falha ao baixar {fname}: {e}")

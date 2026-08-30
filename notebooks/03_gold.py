@@ -33,7 +33,6 @@ from typing import TYPE_CHECKING
 
 try:
     from pyspark.sql import SparkSession, DataFrame
-    from pyspark.sql import functions as F
     _PYSPARK_AVAILABLE = True
 except ModuleNotFoundError:
     _PYSPARK_AVAILABLE = False
@@ -58,6 +57,8 @@ except ImportError:
         silver_path:  str = os.environ.get("SILVER_PATH",  "/mnt/silver/vendas/")
         gold_path:    str = os.environ.get("GOLD_PATH",    "/mnt/gold/vendas/")
         audit_path:   str = os.environ.get("AUDIT_PATH",   "/mnt/audit/pipeline_vendas/")
+        def __post_init__(self) -> None:
+            datetime.strptime(self.batch_date, "%Y-%m-%d")  # ver bandit B608 em 00_config.py
         @property
         def silver_db(self):         return f"{self.catalog}.silver"
         @property
@@ -104,7 +105,7 @@ def _ensure_hadoop_home() -> None:
         if not dest.exists():
             logger.info(f"[HADOOP] Baixando {fname}...")
             try:
-                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)
+                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)  # nosec B310 - base_url e fname sao constantes fixas (winutils oficial), nao input externo
             except Exception as e:
                 logger.warning(f"[HADOOP] Falha ao baixar {fname}: {e}")
     os.environ["HADOOP_HOME"] = str(hadoop_dir)

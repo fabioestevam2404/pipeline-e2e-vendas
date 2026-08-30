@@ -35,7 +35,7 @@ try:
     from pyspark.sql import SparkSession, DataFrame, Window
     from pyspark.sql import functions as F
     from pyspark.sql.types import (
-        IntegerType, DoubleType, DateType, BooleanType, TimestampType
+        IntegerType, DoubleType
     )
     from delta.tables import DeltaTable
     _PYSPARK_AVAILABLE = True
@@ -68,6 +68,8 @@ except ImportError:
         min_price:      float = 0.01
         max_quantity:   int   = 10_000
         max_discount:   float = 1.0
+        def __post_init__(self) -> None:
+            datetime.strptime(self.batch_date, "%Y-%m-%d")  # ver bandit B608 em 00_config.py
         @property
         def bronze_db(self): return f"{self.catalog}.bronze"
         @property
@@ -172,7 +174,7 @@ def _ensure_hadoop_home() -> None:
         if not dest.exists():
             logger.info(f"[HADOOP] Baixando {fname}...")
             try:
-                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)
+                urllib.request.urlretrieve(f"{base_url}/{fname}", dest)  # nosec B310 - base_url e fname sao constantes fixas (winutils oficial), nao input externo
             except Exception as e:
                 logger.warning(f"[HADOOP] Falha ao baixar {fname}: {e}")
     os.environ["HADOOP_HOME"] = str(hadoop_dir)

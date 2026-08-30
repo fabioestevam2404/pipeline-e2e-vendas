@@ -28,14 +28,11 @@ from typing import TYPE_CHECKING
 
 try:
     from pyspark.sql import SparkSession
-    from pyspark.sql import functions as F
-    from delta.tables import DeltaTable
     _PYSPARK_AVAILABLE = True
 except ImportError:
     _PYSPARK_AVAILABLE = False
     if TYPE_CHECKING:
         from pyspark.sql import SparkSession
-        from delta.tables import DeltaTable
 
 try:
     from config import get_config, PipelineConfig
@@ -63,6 +60,9 @@ except ImportError:
         group_analysts:         str = "data_analysts"
         group_executives:       str = "executives"
         group_platform:         str = "data_platform"
+
+        def __post_init__(self) -> None:
+            datetime.strptime(self.batch_date, "%Y-%m-%d")  # ver bandit B608 em 00_config.py
 
         @property
         def bronze_db(self):  return f"{self.catalog}.bronze"
@@ -124,7 +124,7 @@ def _ensure_hadoop_home() -> None:
                "/hadoop-3.3.5/bin/winutils.exe")
         try:
             logger.info("[SETUP] Baixando winutils.exe...")
-            urllib.request.urlretrieve(url, bin_dir / "winutils.exe")
+            urllib.request.urlretrieve(url, bin_dir / "winutils.exe")  # nosec B310 - url e constante fixa (winutils oficial), nao input externo
         except Exception as exc:
             logger.warning(f"[SETUP] winutils não pôde ser baixado: {exc}")
 
